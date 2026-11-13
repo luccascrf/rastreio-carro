@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Rastreio Carro (v4 beta)</title>
+<title>Rastreio Carro (v4.1 beta)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -165,6 +165,7 @@ h1.sec{margin-top:16px}
 </section>
 
 <section id="v-hist" class="hide">
+  <div class="card hide" id="h-warn"></div>
   <h1>Recordes</h1>
   <div class="card" id="h-rec"></div>
   <h1 class="sec">Totais</h1>
@@ -177,7 +178,18 @@ h1.sec{margin-top:16px}
     <input id="c-alert" type="number" inputmode="numeric" min="0" max="250" placeholder="0">
     <p class="note">Acima do limite o velocímetro fica vermelho e toca um bipe (o iPhone no modo silencioso não toca som; a cor funciona sempre).</p>
   </div>
-  <div class="btns"><button class="sm" id="h-bkp">Backup (JSON)</button></div>
+  <h1 class="sec">Google Drive (opcional)</h1>
+  <div class="card">
+    <p class="note" style="margin-top:0">Não é obrigatório. Sem isso o app funciona normalmente e você usa o backup em arquivo. Para ativar, crie um "ID do cliente OAuth" no Google Cloud e cole abaixo (o passo a passo está na conversa).</p>
+    <label>ID do cliente Google</label><input id="g-id" placeholder="xxxxxxxx.apps.googleusercontent.com" autocapitalize="off" autocorrect="off">
+    <div class="chk"><input type="checkbox" id="g-auto"><label for="g-auto" style="margin:0;color:var(--tx);font-size:15px">Enviar ao Drive ao finalizar a viagem</label></div>
+    <div class="btns"><button class="sm" id="g-up">Enviar agora</button><button class="sm" id="g-down">Restaurar do Drive</button></div>
+    <p class="note" id="g-st"></p>
+  </div>
+  <h1 class="sec">Backup em arquivo</h1>
+  <div class="btns"><button class="sm pri" id="h-bkp">Salvar backup</button><button class="sm" id="h-rst">Restaurar backup</button></div>
+  <p class="note">"Salvar backup" abre a folha de compartilhamento do iPhone: escolha Arquivos (iCloud Drive), Google Drive, OneDrive ou e-mail. "Restaurar" lê um arquivo desses e junta com o que já existe, sem duplicar.</p>
+  <input type="file" id="h-file" accept=".json,application/json" class="hide">
 </section>
 
 </div>
@@ -294,6 +306,7 @@ function finishTrip(){
   const tr={id:cur.id,start:cur.start,end:Date.now(),dist:cur.dist,totalMs:Date.now()-cur.start-cur.pausedMs,movingMs:cur.movingMs,max:cur.max,demo:!!cur.demo,pts:cur.pts,splits:cur.splits,stops:cur.stops,stoppedMs:cur.stoppedMs};
   if(tr.dist>=50||confirm('Esta viagem tem só '+Math.round(tr.dist)+' m (praticamente sem movimento). Salvar mesmo assim?'))trips.unshift(tr); LS.set('trips',trips);
   cur=null; LS.set('cur',null); endWatch(); ui(); renderHist(); draw(); renderSplits(); renderStops();
+  if(CFG.gauto&&CFG.gcid&&typeof driveUpload==='function')driveUpload().then(()=>gst('Enviado ao Google Drive automaticamente.')).catch(e=>gst('Envio automático falhou: '+e.message+' Use "Enviar agora".'));
 }
 function ui(){
   const b=$('#btns');
@@ -538,7 +551,7 @@ function renderTotals(){
   }).join('');
 }
 function renderHist(){
-  renderRecords(); renderTotals();
+  renderRecords(); renderTotals(); if(typeof renderWarn==='function')renderWarn();
   const list=$('#h-list');
   if(!trips.length){list.innerHTML='<div class="note">Nenhuma viagem salva ainda.</div>';return}
   const sum=trips.reduce((m,t)=>m+t.dist,0)/1000;
@@ -652,7 +665,76 @@ $('#d-share').onclick=async()=>{
 };
 $('#c-alert').value=CFG.alert||'';
 $('#c-alert').oninput=()=>{CFG.alert=Math.max(0,Math.min(250,+$('#c-alert').value||0));LS.set('cfg',CFG)};
-$('#h-bkp').onclick=()=>dl('rastreio-backup.json',JSON.stringify({trips,fuels}),'application/json');
+/* ---------- backup / restauração (v4.1) ---------- */
+let LB=LS.get('lastBackup',0);
+function backupObj(){return {app:'rastreio-carro',v:2,exportado:Date.now(),trips,fuels,cfg:{alert:CFG.alert||0}}}
+function markBackup(){LB=Date.now();LS.set('lastBackup',LB);renderWarn()}
+function renderWarn(){
+  const el=$('#h-warn'),n=trips.filter(t=>(t.end||t.start)>LB).length+fuels.filter(f=>f.ts>LB).length;
+  if(!trips.length&&!fuels.length||n===0){el.classList.add('hide');return}
+  el.classList.remove('hide');
+  el.innerHTML='<b>Atenção:</b> '+n+' item(ns) ainda sem backup. Os dados estão só neste aparelho. Toque em <b>Salvar backup</b> abaixo.';
+}
+function mergeData(o){
+  if(!o||!Array.isArray(o.trips))throw new Error('Arquivo inválido: não encontrei a lista de viagens.');
+  const ids=new Set(trips.map(t=>t.id));let nt=0,nf=0;
+  o.trips.forEach(t=>{if(t&&t.id!=null&&Array.isArray(t.pts)&&!ids.has(t.id)){trips.push(t);ids.add(t.id);nt++}});
+  trips.sort((a,b)=>b.start-a.start);
+  const key=f=>f.ts+'|'+f.type+'|'+f.total;const fk=new Set(fuels.map(key));
+  (Array.isArray(o.fuels)?o.fuels:[]).forEach(f=>{if(f&&f.ts&&f.type&&!fk.has(key(f))){fuels.push(f);fk.add(key(f));nf++}});
+  fuels.sort((a,b)=>a.ts-b.ts);
+  LS.set('trips',trips);LS.set('fuels',fuels);renderHist();
+  return {nt,nf};
+}
+$('#h-bkp').onclick=async()=>{
+  const txt=JSON.stringify(backupObj()),name='rastreio-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  try{
+    const file=new File([txt],name,{type:'application/json'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'Backup Rastreio Carro'});markBackup();return}
+  }catch(e){if(e&&e.name==='AbortError')return}
+  dl(name,txt,'application/json');markBackup();
+};
+$('#h-rst').onclick=()=>{$('#h-file').value='';$('#h-file').click()};
+$('#h-file').onchange=async()=>{
+  const f=$('#h-file').files[0];if(!f)return;
+  try{const r=mergeData(JSON.parse(await f.text()));alert('Restaurado: '+r.nt+' viagem(ns) e '+r.nf+' abastecimento(s) novos. O que já existia foi mantido.');markBackup()}
+  catch(e){alert('Não consegui restaurar: '+e.message)}
+};
+/* ---------- Google Drive (opcional) ---------- */
+const DRIVE_FILE='rastreio-carro-backup.json';let gTok=null,gExp=0;
+const gst=m=>{$('#g-st').textContent=m};
+$('#g-id').value=CFG.gcid||'';$('#g-auto').checked=!!CFG.gauto;
+$('#g-id').oninput=()=>{CFG.gcid=$('#g-id').value.trim();LS.set('cfg',CFG)};
+$('#g-auto').onchange=()=>{CFG.gauto=$('#g-auto').checked;LS.set('cfg',CFG)};
+function gToken(){
+  return new Promise((ok,no)=>{
+    if(gTok&&Date.now()<gExp-60000)return ok(gTok);
+    if(!CFG.gcid)return no(new Error('Cole primeiro o ID do cliente Google.'));
+    const go=()=>{try{
+      google.accounts.oauth2.initTokenClient({client_id:CFG.gcid,scope:'https://www.googleapis.com/auth/drive.file',
+        callback:r=>{if(r.error)return no(new Error(r.error_description||r.error));gTok=r.access_token;gExp=Date.now()+(r.expires_in||3600)*1000;ok(gTok)},
+        error_callback:e=>no(new Error(e&&e.type?e.type:'login cancelado'))}).requestAccessToken();
+    }catch(e){no(e)}};
+    if(window.google&&google.accounts&&google.accounts.oauth2)return go();
+    const sc=document.createElement('script');sc.src='https://accounts.google.com/gsi/client';sc.onload=go;sc.onerror=()=>no(new Error('Sem internet para falar com o Google.'));document.head.appendChild(sc);
+  });
+}
+async function gFetch(url,opt){const r=await fetch(url,Object.assign({headers:{Authorization:'Bearer '+gTok}},opt));if(!r.ok)throw new Error('Drive respondeu '+r.status);return r}
+async function gFind(){const q=encodeURIComponent("name='"+DRIVE_FILE+"' and trashed=false");const r=await gFetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id,modifiedTime)');const j=await r.json();return (j.files||[])[0]||null}
+async function driveUpload(){
+  await gToken();const body=JSON.stringify(backupObj()),ex=await gFind();
+  if(ex){await gFetch('https://www.googleapis.com/upload/drive/v3/files/'+ex.id+'?uploadType=media',{method:'PATCH',headers:{Authorization:'Bearer '+gTok,'Content-Type':'application/json'},body})}
+  else{const bd='rbnd'+Date.now();
+    const mp='--'+bd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify({name:DRIVE_FILE,mimeType:'application/json'})+'\r\n--'+bd+'\r\nContent-Type: application/json\r\n\r\n'+body+'\r\n--'+bd+'--';
+    await gFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{method:'POST',headers:{Authorization:'Bearer '+gTok,'Content-Type':'multipart/related; boundary='+bd},body:mp})}
+  markBackup();
+}
+async function driveRestore(){
+  await gToken();const ex=await gFind();if(!ex)throw new Error('Não achei o arquivo '+DRIVE_FILE+' no seu Drive. Envie primeiro.');
+  const r=await gFetch('https://www.googleapis.com/drive/v3/files/'+ex.id+'?alt=media');return mergeData(await r.json());
+}
+$('#g-up').onclick=async()=>{gst('Enviando…');try{await driveUpload();gst('Enviado ao Google Drive em '+new Date().toLocaleString('pt-BR')+'.')}catch(e){gst('Não enviou: '+e.message)}};
+$('#g-down').onclick=async()=>{gst('Buscando…');try{const r=await driveRestore();markBackup();gst('Restaurado do Drive: '+r.nt+' viagem(ns) e '+r.nf+' abastecimento(s) novos.')}catch(e){gst('Não restaurou: '+e.message)}};
 
 /* ---------- init ---------- */
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
