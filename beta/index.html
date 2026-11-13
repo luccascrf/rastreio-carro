@@ -292,7 +292,7 @@ function finishTrip(){
   cur.stopSince=null; // parada na chegada não conta
   if(cur.paused){cur.pausedMs+=Date.now()-cur.pauseAt;cur.paused=false}
   const tr={id:cur.id,start:cur.start,end:Date.now(),dist:cur.dist,totalMs:Date.now()-cur.start-cur.pausedMs,movingMs:cur.movingMs,max:cur.max,demo:!!cur.demo,pts:cur.pts,splits:cur.splits,stops:cur.stops,stoppedMs:cur.stoppedMs};
-  if(tr.dist>=50)trips.unshift(tr); LS.set('trips',trips);
+  if(tr.dist>=50||confirm('Esta viagem tem só '+Math.round(tr.dist)+' m (praticamente sem movimento). Salvar mesmo assim?'))trips.unshift(tr); LS.set('trips',trips);
   cur=null; LS.set('cur',null); endWatch(); ui(); renderHist(); draw(); renderSplits(); renderStops();
 }
 function ui(){
