@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Rastreio Carro (v4.3 beta Atlas)</title>
+<title>Rastreio Carro (v4.3.1 beta Atlas)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -230,7 +230,7 @@ let AC=null,lastBeep=0;
 function unlockAudio(){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC.resume)AC.resume()}catch(e){}}
 function beep(){try{if(!AC)return;const o=AC.createOscillator(),g=AC.createGain();o.frequency.value=880;g.gain.value=.25;o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+.25)}catch(e){}}
 let DEMO=false, demoTimer=null;
-const APPV='4.3 beta Atlas'; let DG=LS.get('diag',[]);
+const APPV='4.3.1 beta Atlas'; let DG=LS.get('diag',[]); let DEVMODEL='';
 function fmtDur(ms){const s=Math.max(0,Math.floor(ms/1000));
   if(s>=3600)return [Math.floor(s/3600)+':'+String(Math.floor(s%3600/60)).padStart(2,'0'),'h'];
   return [Math.floor(s/60)+':'+String(s%60).padStart(2,'0'),'min'];}
@@ -672,9 +672,15 @@ $('#d-share').onclick=async()=>{
 $('#c-alert').value=CFG.alert||'';
 $('#c-alert').oninput=()=>{CFG.alert=Math.max(0,Math.min(250,+$('#c-alert').value||0));LS.set('cfg',CFG)};
 /* ---------- diagnóstico (v4.3) ---------- */
+function isStandalone(){ try{ return !!((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone) }catch(e){ return !!navigator.standalone } }
+try{ if(navigator.userAgentData&&navigator.userAgentData.getHighEntropyValues){ navigator.userAgentData.getHighEntropyValues(['model']).then(v=>{ DEVMODEL=(v&&v.model)||''; if(typeof renderDiag==='function')renderDiag() }).catch(()=>{}) } }catch(e){}
 function deviceInfo(){
-  const ua=navigator.userAgent,m=ua.match(/OS (\d+)[_.](\d+)/),os=m?'iOS '+m[1]+'.'+m[2]:(/Android ([\d.]+)/.test(ua)?'Android '+ua.match(/Android ([\d.]+)/)[1]:'sistema desconhecido');
-  return (/iPhone/.test(ua)?'iPhone':(/iPad/.test(ua)?'iPad':'aparelho'))+', '+os+', tela '+screen.width+'x'+screen.height+', '+(navigator.standalone?'instalado na Tela de Início':'aberto no navegador');
+  const ua=navigator.userAgent,ios=ua.match(/OS (\d+)[_.](\d+)/),an=ua.match(/Android ([\d.]+)/);
+  let dev;
+  if(/iPhone|iPad/.test(ua))dev=(/iPad/.test(ua)?'iPad':'iPhone')+(ios?', iOS '+ios[1]+'.'+ios[2]:'');
+  else if(an)dev='Android '+an[1]+(DEVMODEL?', modelo '+DEVMODEL:'');
+  else dev='aparelho desconhecido';
+  return dev+', tela '+screen.width+'x'+screen.height+', '+(isStandalone()?'instalado na Tela de Início':'aberto no navegador');
 }
 function dgLog(k,x){ if(DEMO)return; DG.push(x==null?{t:Date.now(),k}:{t:Date.now(),k,x}); if(DG.length>600)DG=DG.slice(-600); LS.set('diag',DG); }
 let dgLastErr=0;
