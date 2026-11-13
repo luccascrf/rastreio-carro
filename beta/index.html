@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Rastreio Carro (v4.3.2 beta Atlas)</title>
+<title>Rastreio Carro (v4.3.3 beta Atlas)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -51,7 +51,7 @@ input,select{width:100%;font:inherit;font-size:17px;color:var(--tx);background:v
 nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--bg);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 nav a{flex:1;text-align:center;padding:13px 4px;color:var(--mut);font-size:13px;font-weight:600}
 nav a.on{color:var(--ac);box-shadow:inset 0 2px 0 var(--ac)}
-.hide{display:none}
+.hide,#v-trip.hide{display:none!important}
 .note{color:var(--mut);font-size:12px;line-height:1.45}
 #map{height:280px;border-radius:4px;border:1px solid var(--line);background:#E3DFD1;display:none}
 .leaflet-container{font:inherit}
@@ -231,7 +231,7 @@ let AC=null,lastBeep=0;
 function unlockAudio(){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC.resume)AC.resume()}catch(e){}}
 function beep(){try{if(!AC)return;const o=AC.createOscillator(),g=AC.createGain();o.frequency.value=880;g.gain.value=.25;o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+.25)}catch(e){}}
 let DEMO=false, demoTimer=null;
-const APPV='4.3.2 beta Atlas'; let DG=LS.get('diag',[]); let DEVMODEL='';
+const APPV='4.3.3 beta Atlas'; let DG=LS.get('diag',[]); let DEVMODEL='';
 function fmtDur(ms){const s=Math.max(0,Math.floor(ms/1000));
   if(s>=3600)return [Math.floor(s/3600)+':'+String(Math.floor(s%3600/60)).padStart(2,'0'),'h'];
   return [Math.floor(s/60)+':'+String(s%60).padStart(2,'0'),'min'];}
