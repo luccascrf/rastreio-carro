@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Rastreio Carro (v4.3.1 beta Atlas)</title>
+<title>Rastreio Carro (v4.3.2 beta Atlas)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -95,7 +95,8 @@ nav a{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 
 nav a.on{color:var(--ac)}
 
 /* ===== v4 ===== */
-.ov-speed.over{background:#E9D3C8;border-color:var(--red)}
+.ov-speed.over{background:var(--red);border-color:var(--red);color:#fff}
+.ov-speed.over span{color:#F7F5EF!important}
 #v-det{position:fixed;inset:0;z-index:3000;background:var(--bg);overflow:auto;-webkit-overflow-scrolling:touch;padding:env(safe-area-inset-top) 0 calc(28px + env(safe-area-inset-bottom))}
 #v-det .in{max-width:560px;margin:0 auto;padding:12px 14px}
 .dbar{display:flex;align-items:center;gap:8px;margin-bottom:10px}
@@ -230,7 +231,7 @@ let AC=null,lastBeep=0;
 function unlockAudio(){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC.resume)AC.resume()}catch(e){}}
 function beep(){try{if(!AC)return;const o=AC.createOscillator(),g=AC.createGain();o.frequency.value=880;g.gain.value=.25;o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+.25)}catch(e){}}
 let DEMO=false, demoTimer=null;
-const APPV='4.3.1 beta Atlas'; let DG=LS.get('diag',[]); let DEVMODEL='';
+const APPV='4.3.2 beta Atlas'; let DG=LS.get('diag',[]); let DEVMODEL='';
 function fmtDur(ms){const s=Math.max(0,Math.floor(ms/1000));
   if(s>=3600)return [Math.floor(s/3600)+':'+String(Math.floor(s%3600/60)).padStart(2,'0'),'h'];
   return [Math.floor(s/60)+':'+String(s%60).padStart(2,'0'),'min'];}
@@ -302,7 +303,7 @@ function onFix(p){
 /* ---------- viagem ---------- */
 function elapsed(){ if(!cur)return 0; return (cur.paused?cur.pauseAt:Date.now())-cur.start-cur.pausedMs; }
 function save(){ LS.set('cur',cur); }
-function startTrip(){ unlockAudio(); cur={id:Date.now(),start:Date.now(),paused:false,pausedMs:0,pauseAt:0,dist:0,movingMs:0,max:0,pts:[],splits:[],stops:[],stoppedMs:0,stopSince:null,stopPos:null,dg:{fx:0,rej:0,accN:0,accSum:0,gapMax:0,gapN:0,hid:0,err:0}}; dgLog('start'); save(); beginWatch(); ui(); }
+function startTrip(){ unlockAudio(); cur={id:Date.now(),start:Date.now(),paused:false,pausedMs:0,pauseAt:0,dist:0,movingMs:0,max:0,pts:[],splits:[],stops:[],stoppedMs:0,stopSince:null,stopPos:null,dg:{fx:0,rej:0,accN:0,accSum:0,gapMax:0,gapN:0,hid:0,err:0,reo:0,lastT:0}}; dgLog('start'); save(); beginWatch(); ui(); }
 function pauseTrip(){ dgLog('pause'); cur.stopSince=null;cur.paused=true;cur.pauseAt=Date.now();last=null;liveSpd=0;save();ui() }
 function resumeTrip(){ dgLog('resume'); unlockAudio(); cur.pausedMs+=Date.now()-cur.pauseAt;cur.paused=false;save();beginWatch();ui() }
 function finishTrip(){
@@ -686,13 +687,14 @@ function dgLog(k,x){ if(DEMO)return; DG.push(x==null?{t:Date.now(),k}:{t:Date.no
 let dgLastErr=0;
 function dgErr(code){ if(!cur||cur.paused||DEMO)return; if(cur.dg)cur.dg.err++; if(Date.now()-dgLastErr>10000){dgLastErr=Date.now();dgLog('gps_err',code)} }
 function dgFix(acc,prev){
-  if(!cur||cur.paused||DEMO||!cur.dg)return; const g=cur.dg; g.fx++;
+  if(!cur||cur.paused||DEMO||!cur.dg)return; const g=cur.dg; g.fx++; g.lastT=Date.now();
   if(acc>50)g.rej++; else {g.accN++;g.accSum+=acc}
   if(prev&&prev>cur.start){const gap=Date.now()-prev; if(gap>20000){g.gapN++; if(gap/1000>g.gapMax)g.gapMax=Math.round(gap/1000); dgLog('gap',Math.round(gap/1000))}}
 }
 function dgLabel(e){
-  const L={start:'Viagem iniciada',pause:'Viagem pausada',resume:'Viagem retomada',end:'Viagem finalizada',hidden:'Tela apagou ou app foi para segundo plano',visible:'App voltou para a tela',wake_lost:'A tela deixou de ficar acesa'};
+  const L={start:'Viagem iniciada',pause:'Viagem pausada',resume:'Viagem retomada',end:'Viagem finalizada',hidden:'Saiu da tela (tela apagada ou outro app)',visible:'App voltou para a tela',wake_lost:'A tela deixou de ficar acesa'};
   if(e.k==='gap')return 'GPS ficou '+e.x+' s sem sinal';
+  if(e.k==='reopen')return 'App foi reaberto com a viagem em andamento (sem rodar há '+dgSec(e.x)+')';
   if(e.k==='gps_err')return 'Erro de GPS (código '+e.x+')';
   return L[e.k]||e.k;
 }
@@ -708,8 +710,8 @@ function renderDiag(){
   '<div class="m"><small>Pontos de GPS</small><strong>'+g.fx+'</strong></div>'+
   '<div class="m"><small>Precisão média</small><strong>'+acc+'</strong></div>'+
   '<div class="m"><small>Maior sem sinal</small><strong>'+(g.gapMax?dgSec(g.gapMax):'-')+'</strong></div>'+
-  '<div class="m"><small>Tela apagou</small><strong>'+g.hid+'x</strong></div></div>'+
-  '<div class="note" style="margin:8px 0 0">Descartados por precisão ruim: '+g.rej+' · erros de GPS: '+g.err+'</div>'+
+  '<div class="m"><small>Saiu da tela</small><strong>'+g.hid+'x</strong></div></div>'+
+  '<div class="note" style="margin:8px 0 0">'+((g.reo||0)?'<b style="color:var(--red)">App reaberto no meio da viagem: '+g.reo+'x</b> · ':'')+'Descartados por precisão ruim: '+g.rej+' · erros de GPS: '+g.err+'</div>'+
   (ev.length?'<div style="margin-top:8px">'+ev.map(e=>'<div class="item"><div class="t"><span>'+dgLabel(e)+'</span><span style="color:var(--mut);font-weight:400">'+new Date(e.t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+'</span></div></div>').join('')+'</div>':'')+
   '<div class="note" style="margin-top:8px">'+deviceInfo()+' · versão '+APPV+'</div>';
 }
@@ -717,7 +719,7 @@ function dgReport(){
   const L=['Relatório de diagnóstico · Rastreio Carro '+APPV,'Gerado em '+new Date().toLocaleString('pt-BR'),'Aparelho: '+deviceInfo(),''];
   trips.filter(t=>t.dg&&!t.demo).slice(0,5).forEach(t=>{const g=t.dg;
     L.push('Viagem '+new Date(t.start).toLocaleString('pt-BR')+' · '+(t.dist/1000).toFixed(1)+' km');
-    L.push('  pontos recebidos '+g.fx+' · descartados por precisão ruim '+g.rej+' · precisão média '+(g.accN?Math.round(g.accSum/g.accN)+' m':'-')+' · maior intervalo sem sinal '+g.gapMax+' s ('+g.gapN+' acima de 20 s) · tela apagou '+g.hid+'x · erros de GPS '+g.err)});
+    L.push('  pontos recebidos '+g.fx+' · descartados por precisão ruim '+g.rej+' · precisão média '+(g.accN?Math.round(g.accSum/g.accN)+' m':'-')+' · maior intervalo sem sinal '+g.gapMax+' s ('+g.gapN+' acima de 20 s) · saiu da tela '+g.hid+'x · app reaberto '+(g.reo||0)+'x · erros de GPS '+g.err)});
   L.push('','Eventos (do mais antigo ao mais recente):');
   DG.slice(-200).forEach(e=>L.push(new Date(e.t).toLocaleString('pt-BR')+'  '+dgLabel(e)));
   return L.join('\n');
@@ -805,6 +807,12 @@ $('#g-down').onclick=async()=>{gst('Buscando…');try{const r=await driveRestore
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 if(cur&&cur.demo){cur=null;LS.set('cur',null)}
 if(cur){cur.splits=cur.splits||[];cur.stops=cur.stops||[];cur.stoppedMs=cur.stoppedMs||0;cur.stopSince=null}
+if(cur&&!cur.paused&&!cur.demo&&cur.dg){ // app foi recarregado com viagem em andamento (ex.: Safari descarregou a página)
+  const lp=cur.pts.length?cur.pts[cur.pts.length-1][2]:0, lk=Math.max(cur.dg.lastT||0,lp||0,cur.start);
+  cur.dg.reo=(cur.dg.reo||0)+1; dgLog('reopen',Math.round((Date.now()-lk)/1000));
+  lastFixAt=lk; // o próximo ponto de GPS conta o intervalo inteiro sem sinal
+  save();
+}
 /* ---------- modo simulação (abra o app com #demo no fim do endereço) ---------- */
 function demoStep(st){
   st.t+=1; const t=st.t; let v;
